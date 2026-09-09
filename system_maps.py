@@ -115,15 +115,56 @@ def dependency_counts(system: SystemMap) -> tuple[tuple[str, int], ...]:
     return tuple(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
+def dependency_concentrations(system: SystemMap, minimum_dependents: int = 2) -> tuple[str, ...]:
+    if minimum_dependents < 1:
+        raise ValueError("minimum_dependents must be at least 1")
+    return tuple(sorted(node for node, count in dependency_counts(system) if count >= minimum_dependents))
+
+
+def _dependency_reachable(graph: dict[str, tuple[str, ...]], source: str, target: str, removed: str | None = None) -> bool:
+    if source == removed or target == removed:
+        return False
+    pending = [source]
+    seen = {source}
+    while pending:
+        current = pending.pop()
+        for nxt in graph[current]:
+            if nxt == removed:
+                continue
+            if nxt == target:
+                return True
+            if nxt not in seen:
+                seen.add(nxt)
+                pending.append(nxt)
+    return False
+
+
 def single_points_of_failure(system: SystemMap) -> tuple[str, ...]:
-    deps = [edge for edge in system.edges if edge.type == "dependency"]
-    outgoing: dict[str, set[str]] = {node.id: set() for node in system.nodes}
-    incoming: dict[str, set[str]] = {node.id: set() for node in system.nodes}
-    for edge in deps:
-        outgoing[edge.source].add(edge.target)
-        incoming[edge.target].add(edge.source)
-    # Structural SPOF: a dependency target used by at least two distinct dependents.
-    return tuple(sorted(node for node, dependents in incoming.items() if len(dependents) >= 2))
+    """Return dependency nodes whose removal disconnects a previously reachable pair.
+
+    This is deliberately removal-based rather than an in-degree proxy. A heavily used
+    dependency with an alternate dependency path is a concentration, not necessarily
+    a structural single point of failure.
+    """
+    graph = adjacency(system, {"dependency"})
+    nodes = tuple(sorted(graph))
+    baseline = {
+        (source, target)
+        for source in nodes
+        for target in nodes
+        if source != target and _dependency_reachable(graph, source, target)
+    }
+    spofs: list[str] = []
+    for candidate in nodes:
+        disrupted = any(
+            source != candidate
+            and target != candidate
+            and not _dependency_reachable(graph, source, target, removed=candidate)
+            for source, target in baseline
+        )
+        if disrupted:
+            spofs.append(candidate)
+    return tuple(spofs)
 
 
 def summary(system: SystemMap) -> str:
@@ -131,6 +172,8 @@ def summary(system: SystemMap) -> str:
     top = ranked[0] if ranked else ("none", 0)
     cycle_count = len(cycles(system))
     spofs = single_points_of_failure(system)
+    concentrations = dependency_concentrations(system)
     return (f"{len(system.nodes)} nodes, {len(system.edges)} edges; "
             f"top dependency target={top[0]} ({top[1]} incoming); "
-            f"cycles={cycle_count}; single_points_of_failure={','.join(spofs) if spofs else 'none'}")
+            f"cycles={cycle_count}; dependency_concentrations={','.join(concentrations) if concentrations else 'none'}; "
+            f"single_points_of_failure={','.join(spofs) if spofs else 'none'}")
