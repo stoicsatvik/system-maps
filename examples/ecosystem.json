@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {"id": "app", "type": "actor", "label": "Application"},
+    {"id": "backup_db", "type": "resource", "label": "Backup database"},
+    {"id": "customer", "type": "actor", "label": "Customer"},
+    {"id": "gateway", "type": "actor", "label": "Gateway"},
+    {"id": "primary_db", "type": "resource", "label": "Primary database"}
+  ],
+  "edges": [
+    {"source": "app", "target": "gateway", "type": "dependency"},
+    {"source": "customer", "target": "app", "type": "flow"},
+    {"source": "gateway", "target": "backup_db", "type": "dependency"},
+    {"source": "gateway", "target": "primary_db", "type": "dependency"},
+    {"source": "primary_db", "target": "app", "type": "feedback"}
+  ]
+}
