@@ -1,0 +1,23 @@
+name: Foundry graph contracts
+on:
+  pull_request:
+    paths:
+      - 'system_maps.py'
+      - 'tests/**'
+      - '.github/workflows/contracts.yml'
+permissions:
+  contents: read
+concurrency:
+  group: system-maps-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run deterministic contracts
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
